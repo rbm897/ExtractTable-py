@@ -131,6 +131,7 @@ class ExtractTable:
             output_format: str = "df",
             dup_check: bool = False,
             indexing: bool = False,
+            job_id: str = "",
             **kwargs
     ) -> list:
         """
@@ -148,22 +149,31 @@ class ExtractTable:
             any other form-data to be sent to the server for future considerations
         :return: user requested output in list;
         """
-        # Raise a warning if unknown format is requested
-        if output_format not in self._OUTPUT_FORMATS:
-            default_format = "dict"
-            warn_msg = f"Found: {output_format} as output_format; Allowed only {self._OUTPUT_FORMATS}. " \
-                       f"Assigned default format: {default_format}"
-            warnings.warn(warn_msg)
 
         try:
-            with PrepareInput(filepath, pages=pages) as infile:
-                with open(infile.filepath, 'rb') as fp:
-                    trigger_resp = self.trigger_process(fp, dup_check=dup_check, **kwargs)
-        except ClientFileSizeError:
-            big_gen = self.bigfile_upload(filepath=os.path.basename(filepath))
-            with open(filepath, 'rb') as ifile:
-                rq.post(big_gen['url'], data=big_gen['fields'], files={'file': ifile})
-            trigger_resp = self.trigger_process(None, signed_filename=big_gen["fields"]["key"], dup_check=dup_check, **kwargs)
+            if job_id:
+                trigger_resp = self.get_result(job_id, max_wait_time=300)
+        except Exception as e:
+            print('Error in process_file ', e)
+            job_id = ''
+
+        if job_id == '':
+            # Raise a warning if unknown format is requested
+            if output_format not in self._OUTPUT_FORMATS:
+                default_format = "dict"
+                warn_msg = f"Found: {output_format} as output_format; Allowed only {self._OUTPUT_FORMATS}. " \
+                        f"Assigned default format: {default_format}"
+                warnings.warn(warn_msg)
+
+            try:
+                with PrepareInput(filepath, pages=pages) as infile:
+                    with open(infile.filepath, 'rb') as fp:
+                        trigger_resp = self.trigger_process(fp, dup_check=dup_check, **kwargs)
+            except ClientFileSizeError:
+                big_gen = self.bigfile_upload(filepath=os.path.basename(filepath))
+                with open(filepath, 'rb') as ifile:
+                    rq.post(big_gen['url'], data=big_gen['fields'], files={'file': ifile})
+                trigger_resp = self.trigger_process(None, signed_filename=big_gen["fields"]["key"], dup_check=dup_check, **kwargs)
 
         for _type, _obj in trigger_resp.items():
             self.__setattr__(_type, _obj)
